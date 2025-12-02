@@ -6,14 +6,20 @@ from dotenv import load_dotenv
 from PyPDF2 import PdfReader
 from zipfile import ZipFile
 from xml.etree.ElementTree import XML
+from langsmith import traceable
+from langsmith.wrappers import wrap_gemini
+
 #config
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
+traced_client = wrap_gemini(genai)
+
 MODEL = "gemini-2.0-flash"  # or "gemini-2.5-flash-lite"
 
+@traceable
 def call_gemini(system_prompt: str, user_prompt: str) -> str:
-    model = genai.GenerativeModel(MODEL, system_instruction=system_prompt)
+    model = traced_client.GenerativeModel(MODEL, system_instruction=system_prompt)
     resp = model.generate_content(user_prompt)
     return resp.text
 
@@ -31,14 +37,14 @@ def extract_text_from_docx(uploaded_file) -> str:
     """
     Minimal DOCX reader using only stdlib.
     """
-    # UploadedFile is file-like; read its bytes
+    # uploadedfile is file-like; read its bytes
     data = uploaded_file.read()
     with ZipFile(BytesIO(data)) as docx_zip:
         xml_content = docx_zip.read("word/document.xml")
     tree = XML(xml_content)
 
     paragraphs = []
-    # WordprocessingML namespace
+    # wordprocessingml namespace
     ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 
     for paragraph in tree.iter(f"{ns}p"):
@@ -62,7 +68,7 @@ def extract_text_from_file(uploaded_file) -> str:
 
     name = uploaded_file.name.lower()
 
-    # Important: reset file pointer if needed
+    # important: reset file pointer if needed
     uploaded_file.seek(0)
 
     if name.endswith(".pdf"):
@@ -72,7 +78,7 @@ def extract_text_from_file(uploaded_file) -> str:
     elif name.endswith(".txt"):
         return uploaded_file.read().decode("utf-8", errors="ignore")
     else:
-        # Best-effort for .doc or anything else
+        # best-effort for .doc or anything else
         try:
             return uploaded_file.read().decode("utf-8", errors="ignore")
         except Exception:
@@ -162,7 +168,7 @@ with col_jd2:
         key="jd_file",
     )
 
-# Resolve JD text: file overrides if present & readable
+# resolve jd text: file overrides if present & readable
 resolved_jd_text = jd_text.strip()
 if jd_file is not None:
     file_jd_text = extract_text_from_file(jd_file)
@@ -197,48 +203,18 @@ extra_text_resumes = st.text_area(
 
 candidate_texts = []
 
-# From files
+# from files
 if uploaded_resumes:
     for f in uploaded_resumes:
         text = extract_text_from_file(f)
         if text.strip():
             candidate_texts.append(text.strip())
 
-# From pasted text (split by ---)
+# from pasted text (split by ---)
 if extra_text_resumes.strip():
     parts = [p.strip() for p in extra_text_resumes.split("---") if p.strip()]
     candidate_texts.extend(parts)
 
 st.markdown(f"**Detected candidates:** {len(candidate_texts)}")
 if len(candidate_texts) == 0:
-    st.caption("Upload resumes and/or paste resume text to continue.")
-
-#run screening
-st.markdown("## Run Screening")
-
-if "result_text" not in st.session_state:
-    st.session_state["result_text"] = ""
-
-if st.button("Screen Candidates"):
-    if not resolved_jd_text:
-        st.warning("Please provide the Job Description (either paste or upload).")
-    elif len(candidate_texts) == 0:
-        st.warning("Please provide at least one candidate resume (file or text).")
-    else:
-        with st.spinner("Evaluating resumes against the job description..."):
-            user_prompt = build_screening_prompt(resolved_jd_text, candidate_texts)
-            result_text = call_gemini(SCREENING_SYSTEM_PROMPT, user_prompt)
-
-        st.session_state["result_text"] = result_text
-
-        st.success("Screening complete!")
-        st.markdown("## Results")
-        st.markdown(result_text)
-
-if st.session_state["result_text"]:
-    st.download_button(
-        label="Download Results",
-        data=st.session_state["result_text"],
-        file_name="resume_screening_results.md",
-        mime="text/markdown",
-    )
+    st.caption("Upload resumes and
