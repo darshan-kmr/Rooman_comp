@@ -15,7 +15,7 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 traced_client = wrap_gemini(genai)
 
-MODEL = "gemini-2.0-flash" 
+MODEL = "gemini-2.0-flash"  # or "gemini-2.5-flash-lite"
 
 @traceable
 def call_gemini(system_prompt: str, user_prompt: str) -> str:
@@ -217,4 +217,34 @@ if extra_text_resumes.strip():
 
 st.markdown(f"**Detected candidates:** {len(candidate_texts)}")
 if len(candidate_texts) == 0:
-    st.caption("Upload resumes and
+    st.caption("Upload resumes and/or paste resume text to continue.")
+
+#run screening
+st.markdown("## Run Screening")
+
+if "result_text" not in st.session_state:
+    st.session_state["result_text"] = ""
+
+if st.button("Screen Candidates"):
+    if not resolved_jd_text:
+        st.warning("Please provide the Job Description (either paste or upload).")
+    elif len(candidate_texts) == 0:
+        st.warning("Please provide at least one candidate resume (file or text).")
+    else:
+        with st.spinner("Evaluating resumes against the job description..."):
+            user_prompt = build_screening_prompt(resolved_jd_text, candidate_texts)
+            result_text = call_gemini(SCREENING_SYSTEM_PROMPT, user_prompt)
+
+        st.session_state["result_text"] = result_text
+
+        st.success("Screening complete!")
+        st.markdown("## Results")
+        st.markdown(result_text)
+
+if st.session_state["result_text"]:
+    st.download_button(
+        label="Download Results",
+        data=st.session_state["result_text"],
+        file_name="resume_screening_results.md",
+        mime="text/markdown",
+    )
