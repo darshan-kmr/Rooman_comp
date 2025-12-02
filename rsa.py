@@ -15,7 +15,7 @@ genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 traced_client = wrap_gemini(genai)
 
-MODEL = "gemini-2.0-flash"  # or "gemini-2.5-flash-lite"
+MODEL = "gemini-2.0-flash" 
 
 @traceable
 def call_gemini(system_prompt: str, user_prompt: str) -> str:
